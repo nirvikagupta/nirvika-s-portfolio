@@ -66,106 +66,84 @@ const SkillsSection: React.FC = () => {
   const popSoundRef = useRef<HTMLAudioElement | null>(null);
   const bubblingAudioRef = useRef<HTMLAudioElement | null>(null);
   const fadeIntervalRef = useRef<number | null>(null);
+  const location = useLocation();
 
   
 
   // This effect handles everything related to sound
   useEffect(() => {
-    if (window.location.pathname !== '/skills') return;
+    if (location.pathname !== '/skills') return;
+  
     bubblingAudioRef.current = new Audio('/bubbling.mp3');
     bubblingAudioRef.current.volume = 0.3;
-
+    bubblingAudioRef.current.loop = true;
+  
     window.skillsBubblingSounds = window.skillsBubblingSounds || [];
     window.skillsBubblingSounds.push(bubblingAudioRef.current);
-
+  
     bubblingAudioRef.current.play().catch(err => {
       console.error("Audio play failed:", err);
     });
   
-    
-    // Initialize pop sound
-    popSoundRef.current = new Audio('/pop.mp3');
-    popSoundRef.current.volume = 0.3;
-    
-    // Fade out bubbling sound after 5 seconds
     const fadeOutStart = setTimeout(() => {
-      if (bubblingAudioRef.current) {
-        fadeIntervalRef.current = window.setInterval(() => {
-          if (bubblingAudioRef.current && bubblingAudioRef.current.volume > 0.05) {
-            bubblingAudioRef.current.volume -= 0.05;
-          } else {
-            if (bubblingAudioRef.current) {
-              bubblingAudioRef.current.volume = 0;
-              bubblingAudioRef.current.pause();
-            }
-            if (fadeIntervalRef.current !== null) {
-              clearInterval(fadeIntervalRef.current);
-              fadeIntervalRef.current = null;
-            }
-          }
-        }, 100);
-      }
+      fadeIntervalRef.current = window.setInterval(() => {
+        if (bubblingAudioRef.current && bubblingAudioRef.current.volume > 0.05) {
+          bubblingAudioRef.current.volume -= 0.05;
+        } else {
+          stopAudio();
+        }
+      }, 100);
     }, 3500);
-    
-    return () => {
-      // Immediately stop audio
+  
+    const stopAudio = () => {
       if (bubblingAudioRef.current) {
         bubblingAudioRef.current.pause();
         bubblingAudioRef.current.currentTime = 0;
-        
-        // Remove from global tracker
         window.skillsBubblingSounds = window.skillsBubblingSounds?.filter(
           audio => audio !== bubblingAudioRef.current
         ) || [];
-        
         bubblingAudioRef.current = null;
       }
-  
-      // Clear any fading intervals
       if (fadeIntervalRef.current) {
         clearInterval(fadeIntervalRef.current);
         fadeIntervalRef.current = null;
       }
     };
-  }, []);
-
-  useEffect(() => {
-    const handleRouteChange = () => {
-      if (window.location.pathname !== '/skills') {
-        if (bubblingAudioRef.current) {
-          bubblingAudioRef.current.pause();
-          bubblingAudioRef.current.currentTime = 0;
-        }
-      }
-    };
-  
-    window.addEventListener('popstate', handleRouteChange);
-    return () => window.removeEventListener('popstate', handleRouteChange);
-  }, []);
-
-  // This effect handles bubbles and skills visibility
-  useEffect(() => {
-    // Generate bubbles - increased number to 300 to fill the skills section completely
-    const initialBubbles = Array.from({ length: 300 }, (_, i) => ({
-      id: i,
-      size: 20 + Math.random() * 80,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      delay: Math.random() * 3,
-      duration: 5 + Math.random() * 7,
-      color: bubbleColors[Math.floor(Math.random() * bubbleColors.length)],
-      isPopped: false
-    }));
-    setBubbles(initialBubbles);
-  
-    const skillsTimer = setTimeout(() => {
-      setShowSkills(true);
-    }, 3500);
   
     return () => {
-      clearTimeout(skillsTimer);
+      stopAudio();
+      clearTimeout(fadeOutStart);
     };
-  }, []);
+  }, [location.pathname]);
+
+
+  useEffect(() => {
+    if (location.pathname !== '/skills') return;
+  
+    const newBubbles: Bubble[] = Array.from({ length: 300 }, (_, i) => ({
+      id: i,
+      size: 20 + Math.random() * 60,
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      delay: Math.random() * 5,
+      duration: 5 + Math.random() * 5,
+      color: bubbleColors[Math.floor(Math.random() * bubbleColors.length)],
+    }));
+  
+    setBubbles(newBubbles);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname !== '/skills') return;
+  
+    const timer = setTimeout(() => {
+      setShowSkills(true);
+    }, 1000); // or adjust timing as needed
+  
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
+
+  
 
   useEffect(() => {
     if (burstParticles.length === 0) return;
@@ -216,6 +194,17 @@ const SkillsSection: React.FC = () => {
     }
   };
 
+  (SkillsSection as any).cleanupAudio = () => {
+    if (typeof window !== 'undefined') {
+      window.skillsBubblingSounds?.forEach(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+      window.skillsBubblingSounds = [];
+    }
+  };
+
+
   return (
     <section
       id="skills"
@@ -248,23 +237,23 @@ const SkillsSection: React.FC = () => {
         ))}
       </div>
 
-      {burstParticles.map(particle => (
-        <div
-          key={particle.id}
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            left: 0,
-            top: 0,
-            width: `${particle.size}px`,
-            height: `${particle.size}px`,
-            backgroundColor: particle.color,
-            opacity: particle.opacity,
-            transform: `translate(${particle.x}px, ${particle.y}px)`,
-            boxShadow: `0 0 6px ${particle.color}`,
-            zIndex: 100
-          }}
-        />
-      ))}
+     {burstParticles.map(particle => (
+  <div
+    key={particle.id}
+    className="absolute rounded-full pointer-events-none"
+    style={{
+      left: `${particle.x}px`,  // Position based on bubble's center
+      top: `${particle.y}px`,   // Position based on bubble's center
+      width: `${particle.size}px`,
+      height: `${particle.size}px`,
+      backgroundColor: particle.color,
+      opacity: particle.opacity,
+      transform: `translate(-50%, -50%)`, // Ensure particles are centered
+      boxShadow: `0 0 6px ${particle.color}`,
+      zIndex: 100
+    }}
+  />
+))}
 
       <div className="container px-4 mx-auto relative z-20">
         <div className="max-w-4xl mx-auto">
@@ -295,17 +284,6 @@ const SkillsSection: React.FC = () => {
   );
 };
 
-(SkillsSection as any).cleanupAudio = () => {
-  if (typeof window !== 'undefined') {
-    // Stop all bubbling sounds
-    window.skillsBubblingSounds?.forEach(audio => {
-      if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
-      }
-    });
-    window.skillsBubblingSounds = [];
-  }
-};
+
 
 export default SkillsSection;
